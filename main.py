@@ -25,15 +25,23 @@ async def webhook(request: Request):
             chat_id = update.message.chat.id
             text = update.message.text
             
-            if text and text.startswith('/start'):
-                bot.send_message(chat_id, "أهلاً بك في نظام MARSOF AI للتحليل المتقدم. أرسل عنوان العقد لفحصه بالبيانات الحقيقية والمباشرة فقط.")
-            else:
+            # 1. معالجة أمر /start أولاً وبشكل مستقل تماماً لضمان الاستجابة الفورية
+            if text and text.strip().startswith('/start'):
+                bot.send_message(
+                    chat_id, 
+                    "أهلاً بك في نظام **MARSOF AI** المتقدم للتحليل الفعلي والآمن.\n\n"
+                    "أرسل عنوان العقد (Contract Address) الآن وسيقوم البوت بجلب البيانات الحقيقية للسيولة، الضرائب، ومعايير السلامة مباشرة من السيرفر."
+                )
+                return {"ok": True}
+            
+            # 2. معالجة فحص العقود في حال لم يكن النص هو أمر /start
+            if text:
                 raw_text = text.strip()
                 wait_msg = bot.send_message(chat_id, "🔍 جاري الاتصال المباشر بالسيرفر لجلب البيانات الحقيقية للسيولة والأمان...")
                 
                 contract = raw_text.split("::")[0] if "::" in raw_text else raw_text
                 
-                # جلب بيانات الأمان والسيولة الحقيقية من واجهة موثوقة (GoPlus لشبكة BNB/EVM كنموذج حي)
+                # جلب بيانات الأمان والسيولة الحقيقية من واجهة موثوقة
                 api_url = f"https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={contract}"
                 
                 data = None
@@ -56,7 +64,7 @@ async def webhook(request: Request):
                 except Exception as e:
                     print(f"خطأ في الاتصال: {str(e)}")
 
-                # قاعدة الرفض الصارم: إذا فشل جلب البيانات الحقيقية، نعتذر فوراً ولا نعط أي نتيجة وهمية
+                # قاعدة الرفض الصارم: إذا فشل جلب البيانات الحقيقية
                 if not fetch_success or not data:
                     error_report = (
                         f"🛑 **اعتذار تقني صارم (MARSOF AI):**\n"
@@ -65,7 +73,7 @@ async def webhook(request: Request):
                         f"🚫 تم رفض إعطاء أي نتائج أو أرقام افتراضية حفاظاً على دقة التحليل."
                     )
                     bot.edit_message_text(error_report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
-                    return
+                    return {"ok": True}
 
                 # استخراج البيانات الحقيقية بدقة
                 is_honeypot = str(data.get("is_honeypot", "0")) == "1"
@@ -76,7 +84,6 @@ async def webhook(request: Request):
                 is_blacklisted = str(data.get("is_blacklisted", "0")) == "1"
                 holder_count = data.get("holder_count", "غير متوفر")
                 
-                # فحص تركز المحافظ الحقيقي من البيانات المستلمة
                 holders = data.get("holders", [])
                 top_holders_percent = 0.0
                 if holders and isinstance(holders, list):
@@ -86,7 +93,7 @@ async def webhook(request: Request):
                     except:
                         pass
 
-                # نظام التنقيط الصارم بناءً على الأرقام الحقيقية
+                # نظام التنقيط الصارم
                 score = 100
                 checks = []
 
@@ -128,7 +135,6 @@ async def webhook(request: Request):
 
                 score = max(0, score)
 
-                # الحكم النهائي
                 if score >= 80:
                     verdict = "🟢 عملة نظيفة وآمنة (استوفت معايير الأمان والحقيقية)"
                 elif score >= 50:
