@@ -7,7 +7,7 @@ import telebot
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telebot.TeleBot(TELEGRAM_TOKEN) if TELEGRAM_TOKEN else None
 
-app = FastAPI(title="MARSOF AI Engine", version="3.2.0")
+app = FastAPI(title="MARSOF AI Engine", version="3.3.0")
 
 class TokenCheckRequest(BaseModel):
     contract_address: str
@@ -23,8 +23,39 @@ async def receive_telegram_update(request: Request):
         return {"status": "error"}
     try:
         json_data = await request.json()
+        
+        # معالجة مباشرة للرسالة الواردة لضمان الاستجابة الفورية
         update = telebot.types.Update.de_json(json_data)
-        bot.process_new_updates([update])
+        if update.message:
+            chat_id = update.message.chat.id
+            text = update.message.text
+            
+            if text and text.startswith('/start'):
+                bot.send_message(chat_id, "مرحباً بك في نظام MARSOF AI الأمني.\nأرسل عنوان العقد (Contract Address) مباشرة لفحصه الآن.")
+            elif text:
+                contract = text.strip()
+                wait_msg = bot.send_message(chat_id, "جاري فحص العقد عبر محرك MARSOF AI...")
+                
+                try:
+                    api_url = f"https://api.gopluslabs.io/api/v1/token_security/sui?contract_addresses={contract}"
+                    response = requests.get(api_url, timeout=10)
+                    res_json = response.json()
+                    result_dict = res_json.get("result", {})
+                    
+                    if not result_dict or contract.lower() not in result_dict:
+                        bot.edit_message_text("لم يتم العثور على بيانات لهذا العقد. تأكد من صحة العنوان.", chat_id=chat_id, message_id=wait_msg.message_id)
+                        return
+                        
+                    info = result_dict[contract.lower()]
+                    is_honeypot = info.get("is_honeypot", "0") == "1"
+                    risk_score = 50 if is_honeypot else 10
+                    status_text = "عالية المخاطر" if risk_score >= 50 else "سليمة تقنياً"
+                    
+                    report = f"تقرير فحص MARSOF AI:\n- الحالة: {status_text}\n- مؤشر المخاطر: {risk_score}/100"
+                    bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id)
+                except Exception as e:
+                    bot.edit_message_text(f"حدث خطأ أثناء الاتصال: {str(e)}", chat_id=chat_id, message_id=wait_msg.message_id)
+                    
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -52,35 +83,3 @@ def analyze_token(data: TokenCheckRequest):
         return {"status": "success", "report_text": report}
     except Exception as e:
         return {"status": "error", "report_text": str(e)}
-
-if bot:
-    @bot.message_handler(commands=['start', 'help'])
-    def send_welcome(message):
-        bot.send_message(message.chat.id, "مرحباً بك في نظام MARSOF AI.\nأرسل عنوان العقد لفحصه الآن.")
-
-    @bot.message_handler(func=lambda message: True)
-    def handle_message(message):
-        contract = message.text.strip()
-        if contract.startswith('/'):
-            return
-            
-        wait_msg = bot.send_message(message.chat.id, "جاري فحص العقد...")
-        
-        try:
-            api_url = f"https://api.gopluslabs.io/api/v1/token_security/sui?contract_addresses={contract}"
-            response = requests.get(api_url, timeout=10)
-            res_json = response.json()
-            result_dict = res_json.get("result", {})
-            
-            if not result_dict or contract.lower() not in result_dict:
-                bot.edit_message_text("لم يتم العثور على بيانات لهذا العقد.", chat_id=message.chat.id, message_id=wait_msg.message_id)
-                return
-                
-            info = result_dict[contract.lower()]
-            risk_score = 50 if info.get("is_honeypot", "0") == "1" else 10
-            status_text = "عالية المخاطر" if risk_score >= 50 else "سليمة تقنياً"
-            
-            report = f"تقرير فحص MARSOF AI:\n- الحالة: {status_text}\n- مؤشر المخاطر: {risk_score}/100"
-            bot.edit_message_text(report, chat_id=message.chat.id, message_id=wait_msg.message_id)
-        except Exception as e:
-            bot.edit_message_text(f"حدث خطأ: {str(e)}", chat_id=message.chat.id, message_id=wait_msg.message_id)
