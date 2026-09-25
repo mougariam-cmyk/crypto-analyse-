@@ -4,12 +4,11 @@ from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 import telebot
 
-# قراءة التوكن بأمان من متغيرات البيئة في المنصة
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 RENDER_URL = "https://crypto-analyse-bot-z7o0.onrender.com"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN) if TELEGRAM_TOKEN else None
-app = FastAPI(title="MARSOF AI Production Engine", version="3.0.0")
+app = FastAPI(title="MARSOF AI Production Engine", version="3.1.0")
 
 class TokenCheckRequest(BaseModel):
     contract_address: str
@@ -81,12 +80,17 @@ def analyze_token(data: TokenCheckRequest):
 if bot:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
-        bot.reply_to(message, "مرحباً بك في نظام MARSOF AI الأمني السحابي.\nأرسل عنوان العقد (Contract Address) لفحصه الآن.")
+        bot.send_message(message.chat.id, "مرحباً بك في نظام MARSOF AI الأمني السحابي.\nأرسل عنوان العقد (Contract Address) مباشرة لفحصه الآن.")
 
     @bot.message_handler(func=lambda message: True)
     def handle_contract_query(message):
         contract = message.text.strip()
-        wait_msg = bot.reply_to(message, "جاري إيقاظ المحرك وفحص العقد...")
+        
+        # تجاهل الأوامر الأخرى إن وجدت
+        if contract.startswith('/'):
+            return
+            
+        wait_msg = bot.send_message(message.chat.id, "جاري إيقاظ المحرك وفحص العقد...")
         
         try:
             api_url = f"https://api.gopluslabs.io/api/v1/token_security/sui?contract_addresses={contract}"
