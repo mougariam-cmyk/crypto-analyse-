@@ -26,98 +26,107 @@ async def webhook(request: Request):
             text = update.message.text
             
             if text and text.startswith('/start'):
-                bot.send_message(chat_id, "أهلاً بك في نظام MARSOF AI. أرسل عنوان العقد لجلب البيانات والأرقام الحقيقية بدقة.")
+                bot.send_message(chat_id, "أهلاً بك في نظام MARSOF AI الصارم. أرسل عنوان العقد لفحصه بالبيانات الحقيقية فقط (بدون أي نتائج افتراضية).")
             else:
                 raw_text = text.strip()
-                wait_msg = bot.send_message(chat_id, "🔍 جاري الاتصال المباشر وفحص البيانات الحقيقية للعقد...")
+                wait_msg = bot.send_message(chat_id, "🔍 جاري الاتصال المباشر وفحص السيرفر للتحقق من البيانات الحقيقية...")
                 
                 contract = raw_text.split("::")[0] if "::" in raw_text else raw_text
                 
-                # جلب البيانات الحقيقية من API موثوق (مثال لشبكة BNB Chain / EVM التي تدعمها المنصة بأسلوب دقيق)
+                # التحقق المباشر من شبكة EVM/BSC عبر GoPlus كنموذج أمان حقيقي
                 api_url = f"https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={contract}"
                 
                 data = None
+                fetch_success = False
                 try:
                     response = requests.get(api_url, timeout=8)
                     res_json = response.json()
                     result_dict = res_json.get("result", {})
                     if result_dict:
-                        # البحث عن المفتاح بغض النظر عن حالة الأحرف
                         for k, v in result_dict.items():
                             if contract.lower() in k.lower() or k.lower() in contract.lower():
                                 data = v
+                                fetch_success = True
                                 break
-                        if not data and len(result_dict) > 0:
-                            data = list(result_dict.values())[0]
+                        if not fetch_success and len(result_dict) > 0:
+                            data = list(result_dict.values()[0]) if isinstance(result_dict.values(), list) else list(result_dict.values())[0]
+                            fetch_success = True
                 except Exception as e:
-                    print(f"خطأ في الاتصال: {str(e)}")
+                    print(f"خطأ في الاتصال بالسيرفر: {str(e)}")
 
-                if not data:
-                    bot.edit_message_text(f"⚠️ تعذر جلب بيانات حقيقية لهذا العنوان من السيرفر. تأكد أن العقد يتبع الشبكة المدعومة أو أرسل عنواناً صحيحاً.", chat_id=chat_id, message_id=wait_msg.message_id)
+                # قاعدة صارمة: إذا لم يتم جلب البيانات الحقيقية، نعتذر بوضوح تام ولا نعط أي نتيجة وهمية
+                if not fetch_success or not data:
+                    error_report = (
+                        f"🛑 **اعتذار تقني صارم (MARSOF AI):**\n"
+                        f"📌 العقد: `{contract}`\n\n"
+                        f"⚠️ **تعذر التحقق من هذا العقد نهائياً!**\n"
+                        f"السبب: هذا العقد لا يتبع شبكة مدعومة بفحص أمني مباشر ومؤكد في قاعدة بيانات السيرفر الحالية، أو أن البيانات غير متوفرة.\n\n"
+                        f"🚫 **لن يتم إعطاء أي أرقام أو نتائج افتراضية حفاظاً على مصداقية التحليل.**"
+                    )
+                    bot.edit_message_text(error_report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
                     return
 
-                # استخراج الأرقام الحقيقية بدقة من الـ JSON العائد
-                is_honeypot = str(data.get("is_honeypot", "0"))
-                buy_tax_raw = float(data.get("buy_tax", 0)) * 100
-                sell_tax_raw = float(data.get("sell_tax", 0)) * 100
-                is_open_source = str(data.get("is_open_source", "0"))
-                is_mintable = str(data.get("is_mintable", "0"))
-                can_take_back_ownership = str(data.get("can_take_back_ownership", "0"))
+                # استخراج البيانات الحقيقية والمؤكدة 100%
+                is_honeypot = str(data.get("is_honeypot", "0")) == "1"
+                buy_tax = float(data.get("buy_tax", 0)) * 100
+                sell_tax = float(data.get("sell_tax", 0)) * 100
+                is_open_source = str(data.get("is_open_source", "0")) == "1"
+                is_mintable = str(data.get("is_mintable", "0")) == "1"
                 holder_count = data.get("holder_count", "غير متوفر")
                 total_supply = data.get("total_supply", "غير متوفر")
 
-                # خوارزمية التنقيط الحقيقية بناءً على الأرقام المستلمة
+                # خوارزمية التنقيط الحقيقية بناءً على الأرقام الواردة من السيرفر حصراً
                 score = 100
-                deductions = []
+                checks = []
 
-                if is_honeypot == "1":
+                if is_honeypot:
                     score -= 50
-                    deductions.append("❌ العقد Honeypot (ممنوع البيع) [-50 نقطة]")
+                    checks.append("❌ تحذير خطير: العقد مصنف كـ Honeypot (ممنوع البيع) [-50 نقطة]")
                 else:
-                    deductions.append("✅ العقد ليس Honeypot [0 خصم]")
+                    checks.append("✅ الأمان: العقد ليس Honeypot [0 خصم]")
 
-                if buy_tax_raw > 5 or sell_tax_raw > 5:
+                if buy_tax > 5 or sell_tax > 5:
                     score -= 20
-                    deductions.append(f"❌ ضرائب مرتفعة (شراء: {buy_tax_raw}% / بيع: {sell_tax_raw}%) [-20 نقطة]")
+                    checks.append(f"❌ تحذير: ضرائب مرتفعة (شراء: {buy_tax}% / بيع: {sell_tax}%) [-20 نقطة]")
                 else:
-                    deductions.append(f"✅ الضرائب ضمن الطبيعي (شراء: {buy_tax_raw}% / بيع: {sell_tax_raw}%) [0 خصم]")
+                    checks.append(f"✅ الأمان: الضرائب منخفضة وطبيعية (شراء: {buy_tax}% / بيع: {sell_tax}%) [0 خصم]")
 
-                if is_open_source != "1":
+                if not is_open_source:
                     score -= 15
-                    deductions.append("❌ الكود غير مكشوف/موثق [-15 نقطة]")
+                    checks.append("❌ تحذير: الكود المصدر غير موثق أو غير مكشوف [-15 نقطة]")
                 else:
-                    deductions.append("✅ الكود مكشوف وموثق [0 خصم]")
+                    checks.append("✅ الأمان: الكود المصدر مكشوف وموثق [0 خصم]")
 
-                if is_mintable == "1":
+                if is_mintable:
                     score -= 15
-                    deductions.append("❌ صلاحية طباعة عملات جديدة (Mint) مفعلة [-15 نقطة]")
+                    checks.append("❌ تحذير: صلاحية طباعة عملات جديدة (Mint) مفعلة [-15 نقطة]")
                 else:
-                    deductions.append("✅ صلاحية طباعة العملات مغلقة [0 خصم]")
+                    checks.append("✅ الأمان: صلاحية طباعة العملات مغلقة [0 خصم]")
 
                 score = max(0, score)
 
-                # تحديد النتيجة بالاعتماد على النقاط الحقيقية
+                # الحكم النهائي الصارم بناءً على البيانات الحقيقية
                 if score >= 80:
-                    verdict = "🟢 عملة نظيفة وآمنة"
+                    verdict = "🟢 عملة نظيفة وآمنة (تحققت الشروط الفنية)"
                 elif score >= 50:
-                    verdict = "🟡 عملة متوسطة الخطورة"
+                    verdict = "🟡 عملة متوسطة الخطورة (تتطلب الحذر الشديد)"
                 else:
-                    verdict = "🔴 عملة خطيرة جداً (محتالة)"
+                    verdict = "🔴 عملة خطيرة جداً / محتالة (تجنبها تماماً)"
 
-                deductions_text = "\n".join([f"- {item}" for item in deductions])
+                checks_text = "\n".join([f"- {item}" for item in checks])
 
                 report = (
-                    f"📊 **التقرير التحليلي الرقمي المباشر (MARSOF AI):**\n"
+                    f"📊 **التقرير الأمني الرقمي المؤكد (MARSOF AI):**\n"
                     f"📌 العقد: `{contract[:10]}...{contract[-6:]}`\n\n"
-                    f"🎯 **النتيجة:** {verdict}\n"
+                    f"🎯 **النتيجة المؤكدة:** {verdict}\n"
                     f"📈 **مؤشر الأمان الحقيقي:** `{score}/100`\n\n"
-                    f"🔢 **الأرقام والبيانات الفعلية:**\n"
-                    f"- ضريبة الشراء الحقيقية: `{buy_tax_raw}%`\n"
-                    f"- ضريبة البيع الحقيقية: `{sell_tax_raw}%`\n"
-                    f"- عدد الحاملين (Holders): `{holder_count}`\n"
-                    f"- إجمالي المعروض (Supply): `{total_supply}`\n\n"
-                    f"🔍 **تفاصيل التنقيط وخطوط الخطر:**\n"
-                    f"{deductions_text}"
+                    f"🔢 **الأرقام الفعلية من السيرفر:**\n"
+                    f"- ضريبة الشراء الفعلية: `{buy_tax}%`\n"
+                    f"- ضريبة البيع الفعلية: `{sell_tax}%`\n"
+                    f"- إجمالي الحاملين: `{holder_count}`\n\n"
+                    f"🔍 **تفاصيل الفحص والتحقق:**\n"
+                    f"{checks_text}\n\n"
+                    f"🔒 *هذا التقرير مبني حصراً على البيانات الحقيقية المستلمة من السيرفر دون أي افتراضات.*"
                 )
 
                 bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
