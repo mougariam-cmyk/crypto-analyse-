@@ -1,13 +1,42 @@
-  File "<frozen importlib._bootstrap>", line 1398, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
-  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
-  File "<frozen importlib._bootstrap_external>", line 893, in get_code
-  File "<frozen importlib._bootstrap_external>", line 823, in source_to_code
-  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
-  File "/opt/render/project/src/main.py", line 85
-    reasons_formatted = '\n'.join([f"� {r}" for r in reasons]) if reasons else "� ?? ??? ??? ???????? ?????? ?? ???????? ???????."
-                                     ^
-SyntaxError: Non-UTF-8 code starting with '\x95' on line 85, but no encoding declared; see https://peps.python.org/pep-0263/ for details
-==> Exited with status 1
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import requests
+
+app = FastAPI(
+    title="MARSOF AI Security Engine",
+    version="1.0.0"
+)
+
+class TokenCheckRequest(BaseModel):
+    contract_address: str
+    chain: str = "sui"
+
+@app.get("/")
+def home():
+    return {"status": "online"}
+
+@app.post("/analyze-token")
+def analyze_token(data: TokenCheckRequest):
+    contract = data.contract_address.strip()
+    chain = data.chain.strip().lower()
+    api_url = f"https://api.gopluslabs.io/api/v1/token_security/{chain}?contract_addresses={contract}"
+    
+    try:
+        response = requests.get(api_url, timeout=10)
+        res_json = response.json()
+        result_dict = res_json.get("result", {})
+        
+        if not result_dict or contract.lower() not in result_dict:
+            raise HTTPException(status_code=404, detail="Not found")
+            
+        info = result_dict[contract.lower()]
+        risk_score = 50 if info.get("is_honeypot", "0") == "1" else 10
+        
+        return {
+            "status": "success",
+            "contract_address": contract,
+            "risk_score": risk_score,
+            "report_text": f"Risk Score: {risk_score}/100"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
