@@ -49,8 +49,10 @@ async def webhook(request: Request):
                                 fetch_success = True
                                 break
                         if not fetch_success and len(result_dict) > 0:
-                            data = list(result_dict.values()[0]) if isinstance(result_dict.values(), list) else list(result_dict.values())[0]
-                            fetch_success = True
+                            vals = list(result_dict.values())
+                            if vals:
+                                data = vals[0] if not isinstance(vals, list) else vals[0]
+                                fetch_success = True
                 except Exception as e:
                     print(f"خطأ في الاتصال بالسيرفر: {str(e)}")
 
@@ -64,7 +66,7 @@ async def webhook(request: Request):
                         f"🚫 **لن يتم إعطاء أي أرقام أو نتائج افتراضية حفاظاً على مصداقية التحليل.**"
                     )
                     bot.edit_message_text(error_report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
-                    return
+                    return {"ok": True}
 
                 # استخراج البيانات الحقيقية والمؤكدة 100%
                 is_honeypot = str(data.get("is_honeypot", "0")) == "1"
@@ -73,7 +75,6 @@ async def webhook(request: Request):
                 is_open_source = str(data.get("is_open_source", "0")) == "1"
                 is_mintable = str(data.get("is_mintable", "0")) == "1"
                 holder_count = data.get("holder_count", "غير متوفر")
-                total_supply = data.get("total_supply", "غير متوفر")
 
                 # خوارزمية التنقيط الحقيقية بناءً على الأرقام الواردة من السيرفر حصراً
                 score = 100
