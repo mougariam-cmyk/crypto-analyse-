@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 import telebot
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-bot = telebot.TeleBot(TELEGRAM_TOKEN) if TELEGRAM_TOKEN else None
+bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False) if TELEGRAM_TOKEN else None
 app = FastAPI()
 
 @app.get("/")
@@ -13,35 +13,36 @@ def root():
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    print(">>> تم استلام طلب في الـ Webhook بنجاح!")
     try:
         if not bot:
             return {"ok": False, "error": "Bot token missing"}
             
         json_data = await request.json()
-        update = telebot.types.Update.de_json(json_data)
+        print(f">>> البيانات المستلمة: {json_data}") # لمتابعة ما يصل في الـ Logs
         
-        if update and update.message:
-            chat_id = update.message.chat.id
-            text = update.message.text
+        # استخراج الرسالة مباشرة من الـ JSON بدلاً من تعقيدات telebot في البيئات السحابية
+        message = json_data.get("message", {})
+        if message:
+            chat_id = message.get("chat", {}).get("id")
+            text = message.get("text", "")
             
-            # 1. معالجة أمر /start أولاً وبشكل مستقل تماماً لضمان الاستجابة الفورية
-            if text and text.strip().startswith('/start'):
-                bot.send_message(
-                    chat_id, 
-                    "أهلاً بك في نظام **MARSOF AI** المتقدم للتحليل الفعلي والآمن.\n\n"
-                    "أرسل عنوان العقد (Contract Address) الآن وسيقوم البوت بجلب البيانات الحقيقية للسيولة، الضرائب، ومعايير السلامة مباشرة من السيرفر."
-                )
-                return {"ok": True}
-            
-            # 2. معالجة فحص العقود في حال لم يكن النص هو أمر /start
-            if text:
+            if chat_id and text:
+                # 1. الاستجابة الفورية لأمر /start
+                if text.strip().startswith('/start'):
+                    bot.send_message(
+                        chat_id, 
+                        "أهلاً بك في نظام MARSOF AI المتقدم.\n\n"
+                        "أرسل عنوان العقد الآن وسيقوم البوت بجلب البيانات الحقيقية للسيولة والأمان مباشرة من السيرفر."
+                    )
+                    return {"ok": True}
+                
+                # 2. معالجة إرسال العقد
                 raw_text = text.strip()
                 wait_msg = bot.send_message(chat_id, "🔍 جاري الاتصال المباشر بالسيرفر لجلب البيانات الحقيقية للسيولة والأمان...")
                 
                 contract = raw_text.split("::")[0] if "::" in raw_text else raw_text
                 
-                # جلب بيانات الأمان والسيولة الحقيقية من واجهة موثوقة
+                # جلب بيانات الأمان من GoPlus كنموذج حي
                 api_url = f"https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={contract}"
                 
                 data = None
@@ -64,7 +65,6 @@ async def webhook(request: Request):
                 except Exception as e:
                     print(f"خطأ في الاتصال: {str(e)}")
 
-                # قاعدة الرفض الصارم: إذا فشل جلب البيانات الحقيقية
                 if not fetch_success or not data:
                     error_report = (
                         f"🛑 **اعتذار تقني صارم (MARSOF AI):**\n"
@@ -75,7 +75,7 @@ async def webhook(request: Request):
                     bot.edit_message_text(error_report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
                     return {"ok": True}
 
-                # استخراج البيانات الحقيقية بدقة
+                # استخراج البيانات الحقيقية
                 is_honeypot = str(data.get("is_honeypot", "0")) == "1"
                 buy_tax = float(data.get("buy_tax", 0)) * 100
                 sell_tax = float(data.get("sell_tax", 0)) * 100
@@ -93,7 +93,6 @@ async def webhook(request: Request):
                     except:
                         pass
 
-                # نظام التنقيط الصارم
                 score = 100
                 checks = []
 
@@ -136,27 +135,25 @@ async def webhook(request: Request):
                 score = max(0, score)
 
                 if score >= 80:
-                    verdict = "🟢 عملة نظيفة وآمنة (استوفت معايير الأمان والحقيقية)"
+                    verdict = "🟢 عملة نظيفة وآمنة"
                 elif score >= 50:
-                    verdict = "🟡 عملة متوسطة الخطورة (تتطلب حذراً بالغاً)"
+                    verdict = "🟡 عملة متوسطة الخطورة"
                 else:
-                    verdict = "🔴 عملة خطيرة جداً / محتالة (تجنبها تماماً)"
+                    verdict = "🔴 عملة خطيرة جداً / محتالة"
 
                 checks_text = "\n".join([f"- {item}" for item in checks])
 
                 report = (
-                    f"📊 **التقرير التحليلي الحقيقي والمؤكد (MARSOF AI):**\n"
+                    f"📊 **التقرير التحليلي الحقيقي (MARSOF AI):**\n"
                     f"📌 العقد: `{contract[:10]}...{contract[-6:]}`\n\n"
-                    f"🎯 **النتيجة النهائية:** {verdict}\n"
-                    f"📈 **مؤشر الأمان الحقيقي:** `{score}/100`\n\n"
-                    f"🔢 **الأرقام والبيانات الفعلية من السيرفر:**\n"
-                    f"- ضريبة الشراء الفعلية: `{buy_tax}%`\n"
-                    f"- ضريبة البيع الفعلية: `{sell_tax}%`\n"
+                    f"🎯 النتيجة: {verdict}\n"
+                    f"📈 مؤشر الأمان: `{score}/100`\n\n"
+                    f"🔢 **الأرقام الفعلية:**\n"
+                    f"- ضريبة الشراء: `{buy_tax}%`\n"
+                    f"- ضريبة البيع: `{sell_tax}%`\n"
                     f"- إجمالي الحاملين: `{holder_count}`\n"
-                    f"- نسبة تركز أعلى 10 محافظ: `{top_holders_percent:.1f}%`\n\n"
-                    f"🔍 **تفاصيل الفحص والتحقق:**\n"
-                    f"{checks_text}\n\n"
-                    f"🔒 *ملاحظة: هذا التقرير مبني 100% على البيانات الحقيقية المستلمة من السيرفر دون استخدام أي قيم افتراضية.*"
+                    f"- تركز أعلى 10 محافظ: `{top_holders_percent:.1f}%`\n\n"
+                    f"🔍 **تفاصيل الفحص:**\n{checks_text}"
                 )
 
                 bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
