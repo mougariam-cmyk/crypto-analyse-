@@ -7,7 +7,7 @@ import telebot
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False) if TELEGRAM_TOKEN else None
 
-app = FastAPI(title="MARSOF AI Engine", version="3.5.0")
+app = FastAPI(title="MARSOF AI Engine", version="3.6.0")
 
 class TokenCheckRequest(BaseModel):
     contract_address: str
@@ -20,17 +20,17 @@ def home():
 @app.post("/webhook")
 async def receive_telegram_update(request: Request):
     if not bot:
-        return {"status": "error"}
+        return {"status": "error", "message": "Bot token not configured"}
     try:
-        json_data = await request.json()
-        update = telebot.types.Update.de_json(json_data)
+        data = await request.json()
+        update = telebot.types.Update.de_json(data)
         
-        if update.message:
+        if update and update.message:
             chat_id = update.message.chat.id
             text = update.message.text
             
             if text:
-                if text.startswith('/start'):
+                if text.strip().startswith('/start'):
                     bot.send_message(chat_id, "مرحباً بك في نظام MARSOF AI الأمني.\nأرسل عنوان العقد (Contract Address) مباشرة لفحصه الآن.")
                 else:
                     contract = text.strip()
@@ -53,8 +53,8 @@ async def receive_telegram_update(request: Request):
                         
                         report = f"تقرير فحص MARSOF AI:\n- الحالة: {status_text}\n- مؤشر المخاطر: {risk_score}/100"
                         bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id)
-                    except Exception as e:
-                        bot.edit_message_text(f"حدث خطأ أثناء المعالجة: {str(e)}", chat_id=chat_id, message_id=wait_msg.message_id)
+                    except Exception as inner_e:
+                        bot.edit_message_text(f"حدث خطأ أثناء الاتصال بالفحص: {str(inner_e)}", chat_id=chat_id, message_id=wait_msg.message_id)
                         
         return {"status": "ok"}
     except Exception as e:
