@@ -26,99 +26,98 @@ async def webhook(request: Request):
             text = update.message.text
             
             if text and text.startswith('/start'):
-                bot.send_message(chat_id, "أهلاً بك في نظام MARSOF AI للتحليل المتقدم. أرسل عنوان العقد لفحصه عبر خوارزمية الأمان والخطوط الحمراء/الخضراء.")
+                bot.send_message(chat_id, "أهلاً بك في نظام MARSOF AI. أرسل عنوان العقد لجلب البيانات والأرقام الحقيقية بدقة.")
             else:
                 raw_text = text.strip()
-                wait_msg = bot.send_message(chat_id, "🔍 جاري تشغيل خوارزمية الفحص المالي والأمني (MARSOF Engine)...")
+                wait_msg = bot.send_message(chat_id, "🔍 جاري الاتصال المباشر وفحص البيانات الحقيقية للعقد...")
                 
-                # تنظيف العنوان
                 contract = raw_text.split("::")[0] if "::" in raw_text else raw_text
                 
-                # محاولة جلب البيانات (عبر واجهة التحليل المتاحة)
-                security_data = None
-                network_type = "EVM / BNB Chain"
+                # جلب البيانات الحقيقية من API موثوق (مثال لشبكة BNB Chain / EVM التي تدعمها المنصة بأسلوب دقيق)
+                api_url = f"https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={contract}"
                 
+                data = None
                 try:
-                    # فحص عبر GoPlus كمثال للبيانات التقنية المتاحة
-                    api_url = f"https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={contract}"
-                    res = requests.get(api_url, timeout=6).json()
-                    res_dict = res.get("result", {})
-                    if res_dict:
-                        security_data = list(res_dict.values())[0]
-                except:
-                    pass
+                    response = requests.get(api_url, timeout=8)
+                    res_json = response.json()
+                    result_dict = res_json.get("result", {})
+                    if result_dict:
+                        # البحث عن المفتاح بغض النظر عن حالة الأحرف
+                        for k, v in result_dict.items():
+                            if contract.lower() in k.lower() or k.lower() in contract.lower():
+                                data = v
+                                break
+                        if not data and len(result_dict) > 0:
+                            data = list(result_dict.values())[0]
+                except Exception as e:
+                    print(f"خطأ في الاتصال: {str(e)}")
 
-                # تطبيق خوارزمية الفحص والتقييم (Scoring & Rules)
-                red_lines = []
-                green_lines = []
-                risk_score = 100
-                
-                if security_data:
-                    # فحص الهانيبوت (خط أحمر قاتل)
-                    is_honeypot = security_data.get("is_honeypot", "0") == "1"
-                    if is_honeypot:
-                        red_lines.append("⚠️ العقد مصنف كـ Honeypot (ممنوع أو مستحيل البيع).")
-                        risk_score -= 60
-                    else:
-                        green_lines.append("✅ العقد ليس Honeypot (عملية البيع متاحة تقنياً).")
+                if not data:
+                    bot.edit_message_text(f"⚠️ تعذر جلب بيانات حقيقية لهذا العنوان من السيرفر. تأكد أن العقد يتبع الشبكة المدعومة أو أرسل عنواناً صحيحاً.", chat_id=chat_id, message_id=wait_msg.message_id)
+                    return
 
-                    # فحص الكود المصدر
-                    is_open_source = security_data.get("is_open_source", "0") == "1"
-                    if not is_open_source:
-                        red_lines.append("⚠️ الكود المصدر غير مكشوف أو غير موثق (Unverified Source Code).")
-                        risk_score -= 20
-                    else:
-                        green_lines.append("✅ الكود المصدر مكشوف وموثق (Open Source).")
+                # استخراج الأرقام الحقيقية بدقة من الـ JSON العائد
+                is_honeypot = str(data.get("is_honeypot", "0"))
+                buy_tax_raw = float(data.get("buy_tax", 0)) * 100
+                sell_tax_raw = float(data.get("sell_tax", 0)) * 100
+                is_open_source = str(data.get("is_open_source", "0"))
+                is_mintable = str(data.get("is_mintable", "0"))
+                can_take_back_ownership = str(data.get("can_take_back_ownership", "0"))
+                holder_count = data.get("holder_count", "غير متوفر")
+                total_supply = data.get("total_supply", "غير متوفر")
 
-                    # فحص الضرائب
-                    try:
-                        buy_tax = float(security_data.get("buy_tax", "0"))
-                        sell_tax = float(security_data.get("sell_tax", "0"))
-                    except:
-                        buy_tax, sell_tax = 0.0, 0.0
+                # خوارزمية التنقيط الحقيقية بناءً على الأرقام المستلمة
+                score = 100
+                deductions = []
 
-                    if buy_tax > 10 or sell_tax > 10:
-                        red_lines.append(f"⚠️ ضرائب عالية جداً: شراء ({buy_tax}%) / بيع ({sell_tax}%).")
-                        risk_score -= 20
-                    else:
-                        green_lines.append(f"✅ الضرائب في النطاق الطبيعي: شراء ({buy_tax}%) / بيع ({sell_tax}%).")
-                        
-                    # فحص صلاحية الصك (Mint)
-                    is_mintable = security_data.get("is_mintable", "0") == "1"
-                    if is_mintable:
-                        red_lines.append("⚠️ صلاحية طباعة عملات جديدة (Mint) مفعلة وليست ملغاة.")
-                        risk_score -= 15
-                    else:
-                        green_lines.append("✅ صلاحية طباعة عملات جديدة مغلقة.")
+                if is_honeypot == "1":
+                    score -= 50
+                    deductions.append("❌ العقد Honeypot (ممنوع البيع) [-50 نقطة]")
                 else:
-                    # في حال كانت شبكة مثل Sui أو عدم توفر بيانات تفصيلية كلاسيكية
-                    red_lines.append("ℹ️ فحص العمق الكامل يعتمد على السيولة المباشرة و DEXs.")
-                    green_lines.append("✅ العقد نشط ضمن شبكة الأصول الرقمية.")
-                    risk_score = 75
+                    deductions.append("✅ العقد ليس Honeypot [0 خصم]")
 
-                # ضبط النقطة الدنيا
-                risk_score = max(0, risk_score)
-
-                # النتيجة النهائية بناءً على الخوارزمية
-                if risk_score >= 80 and len(red_lines) == 0:
-                    verdict = "🟢 **عملة نظيفة وآمنة (Low Risk)**"
-                elif risk_score >= 50 and len(red_lines) <= 1:
-                    verdict = "🟡 **عملة متوسطة الخطورة (تتطلب الحذر)**"
+                if buy_tax_raw > 5 or sell_tax_raw > 5:
+                    score -= 20
+                    deductions.append(f"❌ ضرائب مرتفعة (شراء: {buy_tax_raw}% / بيع: {sell_tax_raw}%) [-20 نقطة]")
                 else:
-                    verdict = "🔴 **عملة خطيرة جداً / احتمالية احتيال عالية (High Risk / Scam)**"
+                    deductions.append(f"✅ الضرائب ضمن الطبيعي (شراء: {buy_tax_raw}% / بيع: {sell_tax_raw}%) [0 خصم]")
 
-                # صياغة التقرير النهائي المنظم
-                red_text = "\n".join([f"- {item}" for item in red_lines]) if red_lines else "- لا توجد خطوط حمراء مرصودة."
-                green_text = "\n".join([f"- {item}" for item in green_lines]) if green_lines else "- لا توجد مؤشرات إيجابية كافية."
+                if is_open_source != "1":
+                    score -= 15
+                    deductions.append("❌ الكود غير مكشوف/موثق [-15 نقطة]")
+                else:
+                    deductions.append("✅ الكود مكشوف وموثق [0 خصم]")
+
+                if is_mintable == "1":
+                    score -= 15
+                    deductions.append("❌ صلاحية طباعة عملات جديدة (Mint) مفعلة [-15 نقطة]")
+                else:
+                    deductions.append("✅ صلاحية طباعة العملات مغلقة [0 خصم]")
+
+                score = max(0, score)
+
+                # تحديد النتيجة بالاعتماد على النقاط الحقيقية
+                if score >= 80:
+                    verdict = "🟢 عملة نظيفة وآمنة"
+                elif score >= 50:
+                    verdict = "🟡 عملة متوسطة الخطورة"
+                else:
+                    verdict = "🔴 عملة خطيرة جداً (محتالة)"
+
+                deductions_text = "\n".join([f"- {item}" for item in deductions])
 
                 report = (
-                    f"📊 **تقرير تحليل MARSOF AI المتقدم:**\n"
-                    f"📌 العنوان: `{contract[:15]}...`\n\n"
-                    f"🎯 **النتيجة النهائية:**\n{verdict}\n"
-                    f"📈 **مؤشر الأمان:** `{risk_score}/100`\n\n"
-                    f"🛑 **الخطوط الحمراء (المخاطر):**\n{red_text}\n\n"
-                    f"✅ **الخطوط الخضراء (الإيجابيات):**\n{green_text}\n\n"
-                    f"💡 *تم التحليل وفق خوارزمية الفحص الأمني والمالي التلقائي.*"
+                    f"📊 **التقرير التحليلي الرقمي المباشر (MARSOF AI):**\n"
+                    f"📌 العقد: `{contract[:10]}...{contract[-6:]}`\n\n"
+                    f"🎯 **النتيجة:** {verdict}\n"
+                    f"📈 **مؤشر الأمان الحقيقي:** `{score}/100`\n\n"
+                    f"🔢 **الأرقام والبيانات الفعلية:**\n"
+                    f"- ضريبة الشراء الحقيقية: `{buy_tax_raw}%`\n"
+                    f"- ضريبة البيع الحقيقية: `{sell_tax_raw}%`\n"
+                    f"- عدد الحاملين (Holders): `{holder_count}`\n"
+                    f"- إجمالي المعروض (Supply): `{total_supply}`\n\n"
+                    f"🔍 **تفاصيل التنقيط وخطوط الخطر:**\n"
+                    f"{deductions_text}"
                 )
 
                 bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id, parse_mode="Markdown")
