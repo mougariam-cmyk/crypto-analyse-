@@ -7,7 +7,7 @@ import telebot
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telebot.TeleBot(TELEGRAM_TOKEN, threaded=False) if TELEGRAM_TOKEN else None
 
-app = FastAPI(title="MARSOF AI Engine", version="3.6.0")
+app = FastAPI(title="MARSOF AI Engine", version="3.7.0")
 
 class TokenCheckRequest(BaseModel):
     contract_address: str
@@ -20,10 +20,10 @@ def home():
 @app.post("/webhook")
 async def receive_telegram_update(request: Request):
     if not bot:
-        return {"status": "error", "message": "Bot token not configured"}
+        return {"status": "error"}
     try:
-        data = await request.json()
-        update = telebot.types.Update.de_json(data)
+        json_data = await request.json()
+        update = telebot.types.Update.de_json(json_data)
         
         if update and update.message:
             chat_id = update.message.chat.id
@@ -53,33 +53,9 @@ async def receive_telegram_update(request: Request):
                         
                         report = f"تقرير فحص MARSOF AI:\n- الحالة: {status_text}\n- مؤشر المخاطر: {risk_score}/100"
                         bot.edit_message_text(report, chat_id=chat_id, message_id=wait_msg.message_id)
-                    except Exception as inner_e:
-                        bot.edit_message_text(f"حدث خطأ أثناء الاتصال بالفحص: {str(inner_e)}", chat_id=chat_id, message_id=wait_msg.message_id)
+                    except Exception as err:
+                        bot.edit_message_text(f"خطأ في الفحص: {str(err)}", chat_id=chat_id, message_id=wait_msg.message_id)
                         
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
-
-@app.post("/analyze-token")
-def analyze_token(data: TokenCheckRequest):
-    contract = data.contract_address.strip()
-    chain = data.chain.strip().lower()
-    api_url = f"https://api.gopluslabs.io/api/v1/token_security/{chain}?contract_addresses={contract}"
-    
-    try:
-        response = requests.get(api_url, timeout=10)
-        res_json = response.json()
-        result_dict = res_json.get("result", {})
-        
-        if not result_dict or contract.lower() not in result_dict:
-            return {"status": "error", "report_text": "العقد غير موجود أو غير مدعوم."}
-            
-        info = result_dict[contract.lower()]
-        is_honeypot = info.get("is_honeypot", "0") == "1"
-        risk_score = 50 if is_honeypot else 10
-        status_text = "عالية المخاطر" if risk_score >= 50 else "سليمة تقنياً"
-        
-        report = f"تقرير فحص MARSOF AI:\n- الحالة: {status_text}\n- مؤشر المخاطر: {risk_score}/100"
-        return {"status": "success", "report_text": report}
-    except Exception as e:
-        return {"status": "error", "report_text": str(e)}
