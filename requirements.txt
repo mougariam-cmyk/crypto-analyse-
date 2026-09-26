@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pyTelegramBotAPI
+requests
+SQLAlchemy
+psycopg[binary]
