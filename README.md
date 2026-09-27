@@ -1,24 +1,25 @@
-# MARSOF AI — Phase 2 Internal Scoring
+# MARSOF AI — Corrected Phase 1 Final
 
-This build keeps MARSOF's numeric risk scoring internal. Users do not see the point calculation.
+This package is the corrected multi-network Phase 1 release of MARSOF AI.
 
-## User-facing behavior
-- Shows a qualitative assessment and the actual risk indicators.
-- Shows verified market/security data.
-- Missing fields remain `Not available` / `UNAVAILABLE`; they are never converted to zero.
-- Critical risk indicators still override the qualitative assessment.
+## Included
+- Automatic network detection from real indexed/on-chain data
+- BNB Smart Chain, Ethereum, Base, Solana, Hyperliquid, Sui, Arc, Robinhood Chain
+- Multi-source market data: DEX Screener first, GeckoTerminal fills only missing fields
+- Security data: GoPlus for supported EVM networks, GoPlus Solana, GoPlus Sui
+- Solana RPC fallback/supplement for verifiable on-chain fields
+- Sui RPC metadata fallback
+- Exact-contract matching; never silently use another token's result
+- Missing values remain `Not available` / `None`, never converted to zero
+- Scan history and market snapshots
+- Original MARSOF logo only (`marsof_logo.jpg`)
+- Current English Telegram UI with Security / Market / Holders / Comparison / Risk / Full Report / Scan History
+- Holder concentration correction:
+  - Raw Top 10 remains visible for transparency
+  - Burn/dead addresses are excluded from investor concentration
+  - Liquidity pools, LP/lock contracts, known DEX/system addresses and locked holders are excluded when verified
+  - Adjusted Investor Concentration drives concentration risk, not raw LP/burn concentration
+  - Missing holder percentages are never treated as zero
 
-## Internal scoring model
-The internal weighted model uses the agreed factors:
-- Technical security
-- Liquidity lock
-- Eligible investor Top 10 concentration
-- Liquidity size
-- Holder count
-- 24h Volume / Market Cap
-- 24h price trend
-- Contract age
-
-LP/liquidity-pool and known burn/system addresses are excluded from investor concentration when the source identifies them. Their raw holdings remain visible.
-
-The numeric score is stored inside the classification data used by the scan record, but is not rendered in the Telegram UI.
+## Important
+This package does not add the Phase 2 trend scanner, whale monitoring, or X auto-publishing engine. Those remain separate from the stable Phase 1 core.
